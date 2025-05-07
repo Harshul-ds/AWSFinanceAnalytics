@@ -119,11 +119,97 @@ A star schema is employed within Amazon Redshift to deliver an optimized structu
     *   `DimChannel`: Describes sales channels with attributes like `ChannelKey` and `ChannelName`.
     *   `DimCampaign`: Details marketing campaigns, including `CampaignKey`, `CampaignID` (natural key), `CampaignName`, and `AdPlatform`.
 
+#### Visual Data Model (Star Schema ERD)
+
+```mermaid
+erDiagram
+    FactTransactions {
+        int DateKey FK
+        int ProductKey FK
+        int CustomerKey FK
+        int ChannelKey FK
+        decimal Quantity
+        decimal UnitPrice
+        string GrossRevenue "Measures..."
+    }
+    FactMarketingSpend {
+        int DateKey FK
+        int CampaignKey FK
+        int Impressions
+        int Clicks
+        string Spend "Measures..."
+    }
+    DimDate {
+        int DateKey PK
+        date FullDate
+        string Year "Attributes..."
+    }
+    DimProduct {
+        int ProductKey PK
+        string ProductID "Natural Key"
+        string ProductName "Attributes..."
+    }
+    DimCustomer {
+        int CustomerKey PK
+        string CustomerID "Natural Key"
+        string Name "Attributes..."
+    }
+    DimChannel {
+        int ChannelKey PK
+        string ChannelName "Attributes..."
+    }
+    DimCampaign {
+        int CampaignKey PK
+        string CampaignID "Natural Key"
+        string CampaignName "Attributes..."
+    }
+
+    FactTransactions ||--o{ DimDate : "Date"
+    FactTransactions ||--o{ DimProduct : "Product"
+    FactTransactions ||--o{ DimCustomer : "Customer"
+    FactTransactions ||--o{ DimChannel : "Channel"
+
+    FactMarketingSpend ||--o{ DimDate : "Date"
+    FactMarketingSpend ||--o{ DimCampaign : "Campaign"
+```
+
 *(Detailed DDL scripts are available in the `sql/ddl/` directory.)*
 
 ## ETL Process Deep Dive: AWS Glue Job (`glue_etl_job.py`)
 
 The core ETL logic resides in the `etl/glue_etl_job.py` PySpark script, which executes the following orchestrated sequence of operations:
+
+#### Visual ETL Process Flow
+
+```mermaid
+flowchart TD
+    A[Start: Raw Data in S3 (CSVs: Transactions, Marketing, COGS)] --> B[Extract & Schema-Validate into Spark DataFrames];
+    
+    subgraph Dimension Processing Phase
+        direction LR
+        B --> D_Create[Create/Enrich Dimension DataFrames (Date, Product, Customer, Channel, Campaign)];
+        D_Create --> D_Load[Load Dimensions to Redshift];
+        D_Load --> D_SKs[Retrieve Dimension Surrogate Keys (SKs)];
+    end
+
+    subgraph Fact Table Processing Phase
+        F_Trans_Header[FactTransactions Assembly]
+        B -- Transactions DF --> F_Trans_SKs_Join;
+        B -- COGS DF --> F_Trans_COGS_Join;
+        D_SKs -- Relevant SKs --> F_Trans_SKs_Join;
+        F_Trans_SKs_Join[Join Transactions DF with Dim SKs] --> F_Trans_COGS_Join[Join with COGS DF];
+        F_Trans_COGS_Join --> F_Trans_Calc[Perform Calculations (e.g., TotalCOGS)];
+        F_Trans_Calc --> F_Trans_Load[Load FactTransactions to Redshift];
+
+        F_Mktg_Header[FactMarketingSpend Assembly]
+        B -- Marketing Spend DF --> F_Mktg_SKs_Join;
+        D_SKs -- Relevant SKs --> F_Mktg_SKs_Join;
+        F_Mktg_SKs_Join[Join Marketing Spend DF with Dim SKs] --> F_Mktg_Load[Load FactMarketingSpend to Redshift];
+    end
+
+    F_Trans_Load --> E[End: Curated Data in Redshift];
+    F_Mktg_Load  --> E;
+```
 
 1.  **Data Extraction & Schema Enforcement:** The process initiates by ingesting raw `transactions.csv`, `marketing_spend.csv`, and `cogs.csv` files from the designated S3 raw data bucket. Predefined schemas are rigorously applied during ingestion to ensure data type consistency and integrity from the outset.
 2.  **Dimension Table Construction & Enrichment:**
