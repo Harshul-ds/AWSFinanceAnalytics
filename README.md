@@ -183,13 +183,13 @@ The core ETL logic resides in the `etl/glue_etl_job.py` PySpark script, which ex
 
 ```mermaid
 flowchart TD
-    A["Start&#58; Raw Data in S3 &#40;CSVs&#58; Transactions&#44; Marketing&#44; COGS&#41;"] --> B["Extract &amp; Schema-Validate into Spark DataFrames"];
+    A["Raw Data Input"] --> B["Initial Processing"];
     
     subgraph Dimension Processing Phase
         direction LR
-        B --> D_Create["Create/Enrich Dimension DataFrames &#40;Date&#44; Product&#44; Customer&#44; Channel&#44; Campaign&#41;"];
+        B --> D_Create["Build Dimensions"];
         D_Create --> D_Load["Load Dimensions to Redshift"];
-        D_Load --> D_SKs["Retrieve Dimension Surrogate Keys &#40;SKs&#41;"];
+        D_Load --> D_SKs["Get Dimension Keys"];
     end
 
     subgraph Fact Table Processing Phase
@@ -198,7 +198,7 @@ flowchart TD
         B -- COGS DF --> F_Trans_COGS_Join;
         D_SKs -- Relevant SKs --> F_Trans_SKs_Join;
         F_Trans_SKs_Join["Join Transactions DF with Dim SKs"] --> F_Trans_COGS_Join["Join with COGS DF"];
-        F_Trans_COGS_Join --> F_Trans_Calc["Perform Calculations &#40;e.g.&#44; TotalCOGS&#41;"];
+        F_Trans_COGS_Join --> F_Trans_Calc["Calculate Metrics"];
         F_Trans_Calc --> F_Trans_Load["Load FactTransactions to Redshift"];
 
         F_Mktg_Header["FactMarketingSpend Assembly"]
@@ -207,11 +207,11 @@ flowchart TD
         F_Mktg_SKs_Join["Join Marketing Spend DF with Dim SKs"] --> F_Mktg_Load["Load FactMarketingSpend to Redshift"];
     end
 
-    F_Trans_Load --> E["End&#58; Curated Data in Redshift"];
+    F_Trans_Load --> E["Data in Redshift"];
     F_Mktg_Load  --> E;
 ```
 
-1.  **Data Extraction & Schema Enforcement:** The process initiates by ingesting raw `transactions.csv`, `marketing_spend.csv`, and `cogs.csv` files from the designated S3 raw data bucket. Predefined schemas are rigorously applied during ingestion to ensure data type consistency and integrity from the outset.
+1.  **Data Extraction & Schema Enforcement:** The process initiates by ingesting raw `transactions.csv`, `marketing_spend.csv`, and `cogs.csv` files from the designated S3 raw data bucket.
 2.  **Dimension Table Construction & Enrichment:**
     *   **`DimDate` Generation:** A dynamic `DimDate` table is constructed, spanning the complete date range derived from transaction and marketing spend data. A fallback to the current calendar year is implemented if source date ranges are unavailable.
     *   **Source-Driven Dimension Population:** `DimProduct`, `DimCustomer`, `DimChannel`, and `DimCampaign` are populated by extracting distinct values for their respective attributes (e.g., `ProductID`, `CustomerID`) from the source DataFrames. This ensures dimensions accurately reflect the entities present in the raw data.
