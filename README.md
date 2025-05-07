@@ -1,341 +1,191 @@
-# AWS Finance Analytics Platform - Proof-of-Concept
+# AWS-Powered Unified Commerce Performance Analytics for Rapidly Scaling D2C Brands
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## 🚀 Elevating a Growing Business: The Story of "ArtisanGlow"
 
-A proof-of-concept for a scalable, self-service finance analytics platform built on AWS. This project demonstrates an end-to-end data pipeline from ingestion in S3, ETL with AWS Glue, data warehousing in Amazon Redshift, and conceptual visualization.
+**Imagine "ArtisanGlow,"** a direct-to-consumer (D2C) brand specializing in unique, artisanal home goods. They launched with a passion for quality and a savvy digital presence, initially selling through their own Shopify-powered e-commerce store. Fueled by effective social media marketing (Facebook/Instagram Ads, Google Ads) and word-of-mouth, ArtisanGlow has experienced **explosive growth.**
 
-## Table of Contents
+To further expand their market reach, they've strategically embraced the Amazon Marketplace, becoming a third-party seller. While this multi-channel approach has significantly boosted revenue, it has also unveiled a complex web of operational and analytical challenges for their lean finance and marketing teams.
 
-- [Introduction](#introduction)
-- [Problem Statement](#problem-statement)
-- [Goals & Objectives](#goals--objectives)
-- [Architectural Overview](#architectural-overview)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Data Model (Star Schema)](#data-model-star-schema)
-- [ETL Process](#etl-process)
-- [Simulated Data](#simulated-data)
-- [Setup & Deployment (Conceptual)](#setup--deployment-conceptual)
-- [Running the PoC (Conceptual)](#running-the-poc-conceptual)
-- [Key Features](#key-features)
-- [Future Enhancements](#future-enhancements)
-- [Contributing](#contributing)
-- [License](#license)
+This project, the **AWS-Powered Unified Commerce Performance Analytics Platform**, is architected as the solution to ArtisanGlow's critical growth pains, transforming their fragmented data landscape into a powerhouse for strategic decision-making.
 
-## Introduction
+## 🔥 The Challenge: Navigating Multi-Channel Complexity & Data Silos
 
-This project serves as a proof-of-concept (PoC) for building a robust and scalable finance analytics platform using Amazon Web Services (AWS). The goal is to enable self-service business intelligence (BI) capabilities, allowing finance teams to explore data, generate reports, and gain insights into cost structures, capital expenditures (CapEx), and variance analysis with minimal IT dependency.
+ArtisanGlow, like many rapidly scaling D2C brands, found themselves grappling with critical pain points that threatened to stifle their growth and profitability:
 
-## Problem Statement
+1.  **Fragmented Data & The Elusive Single Source of Truth:**
+    *   **Shopify Store:** Rich with sales transactions, customer details, discount code usage, and website analytics.
+    *   **Amazon Seller Central:** A separate ecosystem of marketplace sales data, FBA fees, referral fees, Amazon Advertising costs, and customer reviews.
+    *   **Digital Advertising Platforms (Google Ads, Facebook/Instagram Ads):** Crucial spend data, campaign performance metrics (impressions, clicks, CPC), but disconnected from actual sales conversions across all channels.
+    *   **Cost of Goods Sold (COGS) & Inventory:** Often managed in disparate systems or even spreadsheets, making it difficult to accurately tie procurement costs to individual sales.
+    *   **Shipping & Logistics:** Variable costs from multiple carriers for their D2C fulfillment, needing careful tracking.
 
-Finance departments often struggle with:
-- Siloed data sources and manual data consolidation.
-- Lack of timely access to critical financial data for decision-making.
-- Difficulty in performing complex analyses and generating ad-hoc reports.
-- Scalability issues with existing analytics solutions.
-- Over-reliance on IT for data extraction and report generation.
+2.  **The Labyrinth of True Profitability Calculation:**
+    *   While top-line revenue per channel was visible, determining **true net profit per product, per channel (Shopify vs. Amazon), and even per marketing campaign** was a monumental task. Allocating a myriad of costs – COGS, platform-specific fees (Shopify fees, complex Amazon FBA/referral fees), nuanced advertising spend, shipping, and returns – accurately was nearly impossible with their existing tools.
+    *   **Niche Pain Point:** Deciphering the "halo effect" – how much off-Amazon advertising (e.g., a Facebook Ad) influenced subsequent direct searches and purchases on Amazon – was a complete black box.
 
-This PoC aims to address these challenges by providing a centralized, automated, and self-service analytics solution.
+3.  **Inefficient Marketing Spend & Opaque ROI Attribution:**
+    *   ArtisanGlow struggled to get a holistic, cross-channel view of their marketing funnel. Attributing sales conversions accurately when a customer's journey might span multiple touchpoints (e.g., see a Google Ad, visit the Shopify site, later purchase on Amazon) was based on guesswork.
+    *   This opacity led to fears of wasted ad spend on underperforming campaigns and missed opportunities to double down on high-ROI channels.
 
-## Goals & Objectives
+4.  **The Tyranny of Manual Reporting:**
+    *   The finance team was ensnared in a cycle of **manual, time-consuming, and error-prone reporting.** Month-end involved arduously downloading multiple CSVs, painstakingly cleaning data, and wrestling with brittle, complex spreadsheets (VLOOKUPs, SUMIFs galore!).
+    *   This not only consumed valuable skilled time but also led to significant delays in delivering insights for strategic decision-making and a pervasive lack of trust in the numbers due to potential human error.
 
-- **Design an end-to-end data pipeline:** From data ingestion to visualization-ready data.
-- **Leverage AWS managed services:** To ensure scalability, reliability, and cost-effectiveness.
-- **Implement a star schema:** For optimized analytical querying in Amazon Redshift.
-- **Automate ETL processes:** Using AWS Glue for data transformation and loading.
-- **Enable self-service analytics:** By providing clean, structured data for BI tools like Tableau.
-- **Incorporate alerting mechanisms:** For data quality checks and process monitoring (e.g., using AWS SNS).
-- **Demonstrate automated data refresh capabilities.**
+5.  **The Scalability Bottleneck:**
+    *   ArtisanGlow's manual processes and spreadsheet-based analytics were clearly unsustainable with their aggressive growth trajectory. They recognized the urgent need for a robust, automated solution that could scale with their data volume and business complexity, without requiring an immediate, large investment in a dedicated data engineering team.
 
-## Architectural Overview
+## 💡 The Solution: An AWS-Powered Engine for Unified Commerce Intelligence
 
-The platform follows a modern data warehousing architecture on AWS:
+This project implements a scalable, automated, and self-service-oriented financial analytics platform on AWS, specifically designed to address the challenges faced by ArtisanGlow. It provides a blueprint for transforming raw, multi-channel data into actionable insights.
 
-1.  **Data Ingestion:** Raw financial data (e.g., CSV, Excel files) is uploaded to an **Amazon S3** bucket (Data Lake - Raw Zone).
-2.  **ETL Processing:**
-    *   **AWS Glue Crawlers** (optional) can be used to discover schema from raw data.
-    *   **AWS Glue ETL jobs** (written in PySpark) are triggered to:
-        *   Extract data from the S3 Raw Zone.
-        *   Transform data: cleaning, standardizing, applying business logic, joining datasets.
-        *   Load transformed data into another S3 bucket (Data Lake - Processed Zone) in a query-optimized format (e.g., Parquet).
-        *   Load data from the Processed Zone into **Amazon Redshift** (Data Warehouse).
-3.  **Data Warehousing:**
-    *   **Amazon Redshift** stores the data in a star schema, optimized for analytical queries.
-    *   Dimension tables (e.g., `DimDate`, `DimDepartment`, `DimAccount`) and Fact tables (e.g., `FactFinancials`) are defined.
-4.  **Data Visualization & Reporting:**
-    *   BI tools like **Tableau**, Amazon QuickSight, or others connect to Amazon Redshift to create interactive dashboards and reports. (This PoC focuses on preparing data for this stage).
-5.  **Orchestration & Automation:**
-    *   **AWS Step Functions** or **Amazon CloudWatch Events (EventBridge)** can orchestrate the ETL pipeline (e.g., trigger Glue jobs on a schedule or S3 event).
-6.  **Alerting & Monitoring:**
-    *   **Amazon SNS** can be used to send notifications for ETL job success/failure or data anomalies.
-    *   **Amazon CloudWatch** monitors AWS resources and logs.
+**Core Architecture & Components:**
 
-```mermaid
-graph LR
-    A[S3 Raw Data Lake] -->|AWS Glue ETL| B(S3 Processed Data Lake - Parquet)
-    B -->|AWS Glue ETL/COPY| C[Amazon Redshift - Star Schema]
-    C -->|SQL Queries| D(BI Tools - Tableau/QuickSight)
-    E[Data Sources] --> A
-    F[CloudWatch Events/Step Functions] -->|Triggers| G[AWS Glue ETL Jobs]
-    G -->|Notifications| H[Amazon SNS]
+*   **Amazon S3 (Data Lake Foundation):** Serves as the central, scalable, and cost-effective repository for all raw and processed data. ArtisanGlow can land data exports from Shopify, Seller Central, ad platforms, and COGS systems here in various formats.
+*   **AWS Glue (Intelligent ETL & Data Catalog):** The workhorse for data transformation and preparation.
+    *   **ETL Jobs (PySpark):** Scripts are designed to automatically ingest data from S3, perform complex transformations (data cleansing, standardization, currency conversion if needed), join disparate datasets (e.g., sales with ad spend, sales with COGS), and implement crucial business logic for **cost allocation and multi-touch attribution (conceptually).**
+    *   **Glue Data Catalog:** Acts as a central metadata repository, making data easily discoverable and usable by Redshift and other analytics services.
+*   **Amazon Redshift (High-Performance Cloud Data Warehouse):** Stores the curated, analysis-ready data in a meticulously designed **star schema.** This schema is optimized for financial reporting and BI, featuring dimensions like `DimDate`, `DimProduct`, `DimChannel` (Shopify, Amazon-FBA, Amazon-MFBM), `DimCustomer` (unified where possible), `DimAdCampaign`, `DimPromotion`, and a central `FactFinancialPerformance` table. This fact table consolidates sales, all associated costs, and calculated profitability metrics at a granular level.
+*   **AWS CloudFormation (Infrastructure as Code):** The entire AWS infrastructure (VPC, S3 buckets, IAM roles, Redshift cluster, Glue jobs, Secrets Manager) is defined in a comprehensive CloudFormation template. This enables:
+    *   **Automated, Repeatable Deployments:** Spin up or tear down the entire environment consistently.
+    *   **Version Control & Auditing:** Track infrastructure changes alongside application code.
+    *   **Scalability & Maintainability:** Easily update and manage the infrastructure as needs evolve.
+*   **AWS Secrets Manager:** Securely manages sensitive credentials like the Redshift master password, integrating seamlessly with CloudFormation and accessible by the Glue ETL jobs.
+*   **Robust Networking (VPC):** A custom Amazon VPC with public and private subnets, NAT Gateways, and an S3 gateway endpoint ensures secure and efficient data flow.
+
+**Key Transformations & Business Logic (Conceptual - Handled by Glue):**
+
+*   **Unified Customer View:** Logic to attempt to identify and merge customer records across Shopify and Amazon where possible.
+*   **Fee Calculation Engine:** Applying complex fee structures from Amazon (referral fees, FBA fees, storage fees) and Shopify (transaction fees).
+*   **COGS Allocation:** Joining sales data with product cost data based on sale date to ensure accurate COGS per transaction.
+*   **Ad Spend Attribution:** Implementing attribution models (e.g., last-click, multi-touch - conceptually) to allocate ad spend from various platforms to sales transactions.
+*   **Currency Conversion:** Standardizing all monetary values to a single currency if sources use different ones.
+
+## ✨ Empowering ArtisanGlow: The Tangible Benefits
+
+By implementing this platform, ArtisanGlow can achieve:
+
+*   **A Single Source of Truth:** Consolidated financial and operational data for reliable reporting and analysis.
+*   **Clear Profitability Insights:** Understand true net profitability by product, channel, campaign, and customer segment.
+*   **Optimized Marketing ROI:** Make data-driven decisions on ad spend allocation by accurately measuring cross-channel campaign effectiveness.
+*   **Automated & Efficient Reporting:** Free up the finance team for higher-value analysis instead of manual data wrangling.
+*   **Scalable Foundation:** A platform that grows with their business, enabling future capabilities like demand forecasting, customer lifetime value (CLV) analysis, and advanced anomaly detection.
+*   **Enhanced Data Governance:** Improved data quality, consistency, and security.
+
+## 🎯 Why This Project Matters for an Amazon BIE Role
+
+This project is designed to showcase the qualities and skills highly valued in a Business Intelligence Engineer at Amazon:
+
+*   **Customer Obsession:** It directly addresses and solves complex, real-world pain points for a growing e-commerce business (a typical Amazon customer/seller).
+*   **Ownership & End-to-End Thinking:** Demonstrates the ability to architect and conceptualize a complete data-to-insights pipeline, from raw data ingestion to enabling sophisticated BI.
+*   **Bias for Action & Automation:** Emphasizes automating manual, error-prone processes and building for efficiency and scale.
+*   **Dive Deep:** Requires a deep understanding of intricate business logic (multi-channel cost allocation, fee structures, marketing attribution) and the ability to translate these into robust data models and ETL processes.
+*   **Technical Prowess:** Leverages a suite of core AWS data services (S3, Glue, Redshift), Infrastructure as Code (CloudFormation), security best practices (IAM, Secrets Manager, VPC), and data warehousing principles (star schema).
+*   **Frugality (Smart Scalability):** By building on AWS's flexible and pay-as-you-go infrastructure, the solution is cost-effective and avoids large upfront investments, scaling as the business grows.
+*   **Deliver Results:** The ultimate aim is to empower the business with actionable intelligence that drives improved profitability, operational efficiency, and strategic growth.
+
+This platform is more than just a technical exercise; it's a blueprint for how businesses can leverage AWS to achieve data-driven decision-making and unlock their full potential in a competitive multi-channel landscape.
+
+## 🛠️ Technology Stack
+
+*   **Data Lake:** Amazon S3
+*   **ETL:** AWS Glue (PySpark)
+*   **Data Warehouse:** Amazon Redshift
+*   **Infrastructure as Code:** AWS CloudFormation
+*   **Secrets Management:** AWS Secrets Manager
+*   **Networking:** Amazon VPC (Virtual Private Cloud)
+*   **Identity & Access Management:** AWS IAM
+*   **Placeholder for BI/Visualization:** Amazon QuickSight / Tableau (conceptual)
+
+## 📂 Project Structure
+
 ```
-
-## Technology Stack
-
--   **Data Lake:** Amazon S3
--   **ETL:** AWS Glue (PySpark)
--   **Data Warehouse:** Amazon Redshift
--   **Orchestration:** AWS Step Functions, Amazon CloudWatch Events (EventBridge)
--   **Alerting:** Amazon SNS
--   **Monitoring:** Amazon CloudWatch
--   **Infrastructure as Code (Conceptual):** AWS CloudFormation or Terraform
--   **BI/Visualization (Conceptual):** Tableau, Amazon QuickSight
-
-## Project Structure
-
-```
-aws-finance-analytics-poc/
-├── .git/
-├── .gitignore
-├── LICENSE.md
-├── README.md
+aws_finance_analytics_poc/
 ├── data/
-│   ├── raw/                 # Sample raw input data (e.g., transactions.csv, budget.csv)
-│   └── processed/           # Data after ETL, ready for Redshift (e.g., parquet files)
+│   ├── raw/                # Raw data extracts (e.g., transactions.csv, marketing_spend.csv, cogs.csv)
+│   │   ├── transactions.csv  # Combined sales from Shopify, Amazon
+│   │   ├── marketing_spend.csv # Spend from Google Ads, Facebook Ads, Amazon Ads
+│   │   └── cogs.csv          # Cost of goods sold per SKU
+│   └── processed/          # Processed data (e.g., Parquet files for Redshift staging)
+│       └── .gitkeep
+├── docs/
+│   └── .gitkeep            # Additional documentation (e.g., detailed data model, ETL logic deep-dive)
 ├── etl/
-│   └── glue_etl_job.py      # AWS Glue PySpark script
+│   └── glue_etl_job.py     # PySpark script for AWS Glue ETL job
+├── infra/
+│   └── cloudformation_template.yaml # AWS CloudFormation template for infrastructure
 ├── sql/
-│   ├── ddl/                 # Data Definition Language scripts for Redshift
+│   ├── ddl/                # Data Definition Language scripts for Redshift
 │   │   ├── create_dimensions.sql
 │   │   └── create_facts.sql
-│   └── dml/                 # Data Manipulation Language scripts (e.g., sample inserts, queries)
+│   └── dml/                # Data Manipulation Language scripts (sample queries)
 │       └── sample_queries.sql
-├── infra/                   # Infrastructure as Code (IaC) templates (conceptual)
-│   └── cloudformation_template.yaml # (Example)
-└── docs/                    # Additional documentation, design notes
-
+├── .gitignore
+├── LICENSE.md
+└── README.md
 ```
 
-## Data Model (Star Schema)
+## 📊 Data Model (Conceptual Star Schema for Redshift)
 
-A star schema is chosen for its simplicity and performance benefits for analytical queries. It consists of one or more fact tables referencing any number of dimension tables.
+*   **Fact Table:**
+    *   `FactFinancialPerformance`: Contains granular transaction-level or daily summary data with foreign keys to dimension tables and key measures (Revenue, Discounts, ShippingRevenue, COGS, AmazonFees, ShopifyFees, AdSpend, Returns, NetProfit, etc.).
+*   **Dimension Tables:**
+    *   `DimDate`: Date attributes (Day, Month, Quarter, Year, DayofWeek, etc.).
+    *   `DimProduct`: Product details (SKU, Name, Category, Brand, Supplier).
+    *   `DimChannel`: Sales channel (e.g., 'Shopify Web', 'Amazon FBA', 'Amazon FBM').
+    *   `DimCustomer`: Customer attributes (CustomerID, Segment, Location - PII considerations apply).
+    *   `DimAdCampaign`: Marketing campaign details (CampaignID, CampaignName, SourcePlatform (Google/Facebook/Amazon Ads), CampaignType).
+    *   `DimPromotion`: Discount codes or promotions applied.
 
-### Fact Tables
+## ⚙️ Setup and Deployment (Conceptual Overview)
 
--   **`FactFinancials`**: Central table holding quantitative measures (facts) like amount, budget amount, variance.
-    -   `DateKey` (FK to `DimDate`)
-    -   `DepartmentKey` (FK to `DimDepartment`)
-    -   `AccountKey` (FK to `DimAccount`)
-    -   `ScenarioKey` (FK to `DimScenario` - e.g., Actual, Budget)
-    -   `Amount` (DECIMAL)
-    -   `BudgetAmount` (DECIMAL)
-    -   `Variance` (DECIMAL)
-    -   `TransactionDate` (DATE)
-    -   `LoadTimestamp` (TIMESTAMP)
+1.  **Prerequisites:** AWS Account, AWS CLI configured, necessary IAM permissions for CloudFormation deployment.
+2.  **Customize Parameters:** Review and update parameters in `infra/cloudformation_template.yaml` (e.g., `ProjectPrefix`, VPC CIDRs).
+3.  **Upload Glue Script to S3:** Place the `etl/glue_etl_job.py` into the S3 bucket that will be created by CloudFormation for Glue scripts.
+4.  **Deploy CloudFormation Stack:**
+    ```bash
+    aws cloudformation deploy \
+        --template-file infra/cloudformation_template.yaml \
+        --stack-name <your-stack-name> \
+        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+        --parameter-overrides ProjectPrefix=<your-prefix> RedshiftMasterUsername=<your-user> # Add other params as needed
+    ```
+5.  **Prepare Raw Data:** Upload sample CSV files (or your actual data) to the 'raw' S3 bucket created by the stack.
+6.  **Run AWS Glue ETL Job:** Trigger the `*-Financial-ETL-Job` from the AWS Glue console or via the AWS CLI/SDK.
+7.  **Connect BI Tool:** Connect your preferred BI tool (e.g., Amazon QuickSight, Tableau) to the Amazon Redshift cluster using the endpoint and credentials (master user from parameters, password from Secrets Manager).
 
-### Dimension Tables
+## 🚀 Running the PoC & Exploring Data
 
--   **`DimDate`**: Attributes related to date and time.
-    -   `DateKey` (PK)
-    -   `FullDate` (DATE)
-    -   `Year` (INT)
-    -   `Quarter` (INT)
-    -   `Month` (INT)
-    -   `Day` (INT)
-    -   `WeekOfYear` (INT)
-    -   `DayOfWeek` (VARCHAR)
--   **`DimDepartment`**: Attributes for different departments.
-    -   `DepartmentKey` (PK)
-    -   `DepartmentName` (VARCHAR)
-    -   `DepartmentCode` (VARCHAR)
-    -   `BusinessUnit` (VARCHAR)
--   **`DimAccount`**: Financial accounts.
-    -   `AccountKey` (PK)
-    -   `AccountName` (VARCHAR)
-    -   `AccountNumber` (VARCHAR)
-    -   `AccountType` (VARCHAR - e.g., Revenue, Expense, Asset)
-    -   `Category` (VARCHAR)
--   **`DimScenario`**: Differentiates data types like Actuals vs. Budget.
-    -   `ScenarioKey` (PK)
-    -   `ScenarioName` (VARCHAR - e.g., "Actual", "Budget Q1", "Forecast")
+1.  Once the Glue job completes successfully, your Redshift data warehouse will be populated.
+2.  Use the sample queries in `sql/dml/sample_queries.sql` (via a Redshift query editor) to explore the data and validate the ETL process.
+3.  Build dashboards in your BI tool to visualize key performance indicators (KPIs) like:
+    *   Channel-wise Profitability.
+    *   Product Contribution Margin.
+    *   Marketing Campaign ROI.
+    *   Sales Trends (Daily, Monthly, Quarterly).
 
-## ETL Process
+## ✨ Key Features & Strengths of this Approach
 
-1.  **Extraction:**
-    -   AWS Glue job reads raw financial data files (e.g., CSVs from `s3://your-bucket/data/raw/`).
-2.  **Transformation:**
-    -   **Data Cleaning:** Handle missing values, correct data types, remove duplicates.
-    -   **Standardization:** Ensure consistent formats for dates, codes, etc.
-    -   **Business Logic:** Calculate derived fields like variance (Actual - Budget).
-    -   **Lookups/Joins:** Enrich data by joining with dimension-like information if present in source, or prepare for dimension key lookups.
-    -   **Schema Mapping:** Transform data to fit the target star schema.
-    -   **Surrogate Key Generation:** Generate surrogate keys for dimension tables if not using natural keys.
-3.  **Loading:**
-    -   **Processed S3:** Transformed data is written to `s3://your-bucket/data/processed/` in Parquet format.
-    -   **Redshift:** Data is loaded from the processed S3 location into Redshift dimension and fact tables using the `COPY` command or Glue's Redshift connector.
-        -   Dimensions are typically loaded first, followed by facts.
-        -   Incremental loading strategies (e.g., based on transaction date or load timestamp) should be considered for production.
+*   **Automation:** End-to-end automation from infrastructure deployment to ETL.
+*   **Scalability:** AWS services scale seamlessly with data volume and processing needs.
+*   **Cost-Effectiveness:** Pay-as-you-go model, optimized for growing businesses.
+*   **Data-Driven Culture:** Empowers teams with self-service access to reliable, unified data.
+*   **Modularity:** Components can be enhanced or replaced independently.
+*   **Security:** Utilizes IAM, Secrets Manager, and VPC for a secure environment.
 
-## Simulated Data
+## 🔮 Future Enhancements (Roadmap)
 
-This PoC will use simulated CSV files for:
--   `transactions.csv`: Contains actual financial transaction records (date, department, account, amount).
--   `budget.csv`: Contains budgeted amounts (date/period, department, account, budget amount).
+*   **Event-Driven ETL:** Transition to S3 event-triggered Glue jobs for near real-time data processing.
+*   **API-based Data Ingestion:** Replace CSV uploads with direct API connections to Shopify, Amazon SP-API, Google Ads API, Facebook Marketing API for more robust and timely data acquisition (using services like AWS AppFlow or custom Lambda functions).
+*   **Advanced Analytics:** Incorporate machine learning (e.g., Amazon SageMaker) for demand forecasting, customer segmentation, anomaly detection in spending.
+*   **Data Quality Monitoring:** Implement automated data quality checks within the Glue ETL process or using services like AWS Deequ.
+*   **CI/CD Pipeline:** Set up a CI/CD pipeline (e.g., AWS CodePipeline, GitHub Actions) for automated testing and deployment of CloudFormation and Glue script changes.
+*   **Granular Access Control in Redshift:** Define specific user roles and permissions within Redshift for different teams.
+*   **Interactive Dashboards:** Develop pre-built QuickSight dashboards for common financial reports.
 
-These will be placed in the `data/raw/` directory.
+## 🤝 Contributing
 
-## Setup & Deployment (Conceptual)
+Contributions, ideas, and feedback are welcome! Please open an issue or submit a pull request.
 
-This section outlines the conceptual steps to deploy the platform on AWS. Actual deployment would involve using AWS Console, CLI, or IaC tools like AWS CloudFormation or Terraform.
-
-### Prerequisites
-
--   An active AWS Account.
--   AWS CLI installed and configured with appropriate administrative or power-user permissions.
--   Familiarity with S3, IAM, AWS Glue, and Amazon Redshift services.
--   A SQL client for connecting to Redshift (e.g., DBeaver, SQL Workbench/J, psql).
-
-### Deployment Steps
-
-1.  **Create S3 Buckets:**
-    *   `your-unique-bucket-name-raw-data`: For storing raw input data files (e.g., CSVs).
-    *   `your-unique-bucket-name-processed-data`: For storing transformed data in Parquet format.
-    *   `your-unique-bucket-name-glue-scripts`: For storing AWS Glue ETL scripts and temporary files.
-    *   _Replace `your-unique-bucket-name` with a globally unique identifier._
-
-2.  **Set up Amazon Redshift Cluster:**
-    *   Launch a new Redshift cluster (e.g., `dc2.large` or `ra3.xlplus` for PoC purposes).
-    *   Configure VPC, subnets, and security groups to allow access from AWS Glue and your SQL client.
-    *   Note down the cluster endpoint, database name, master username, and password.
-
-3.  **Configure IAM Roles:**
-    *   **Glue Service Role:**
-        *   Create an IAM role for AWS Glue.
-        *   Attach AWS managed policies: `AWSGlueServiceRole`.
-        *   Attach a custom policy granting S3 access (read from raw bucket, read/write to processed and scripts buckets) and Redshift Data API access (if using it) or permissions to describe Redshift clusters.
-        *   Example S3 policy snippet:
-            ```json
-            {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Action": [
-                            "s3:GetObject",
-                            "s3:PutObject",
-                            "s3:ListBucket",
-                            "s3:DeleteObject"
-                        ],
-                        "Resource": [
-                            "arn:aws:s3:::your-unique-bucket-name-raw-data/*",
-                            "arn:aws:s3:::your-unique-bucket-name-raw-data",
-                            "arn:aws:s3:::your-unique-bucket-name-processed-data/*",
-                            "arn:aws:s3:::your-unique-bucket-name-processed-data",
-                            "arn:aws:s3:::your-unique-bucket-name-glue-scripts/*",
-                            "arn:aws:s3:::your-unique-bucket-name-glue-scripts"
-                        ]
-                    }
-                ]
-            }
-            ```
-    *   **Redshift Cluster Role (for COPY from S3):**
-        *   Create an IAM role that Redshift can assume.
-        *   Attach the `AmazonS3ReadOnlyAccess` policy (or a more restrictive policy granting read access specifically to the `processed-data` S3 bucket).
-        *   Associate this role with your Redshift cluster (Modify Cluster -> IAM roles).
-
-4.  **Prepare Redshift Database:**
-    *   Connect to your Redshift cluster using a SQL client.
-    *   Run the DDL scripts located in `sql/ddl/create_dimensions.sql` and `sql/ddl/create_facts.sql` to create the necessary tables (DimDate, DimDepartment, DimAccount, DimScenario, FactFinancials).
-
-5.  **Set up AWS Glue ETL Job:**
-    *   Navigate to AWS Glue in the AWS Console.
-    *   Add a new ETL job.
-    *   Configure the job:
-        *   **Name:** `FinanceAnalytics_ETL_Job`
-        *   **IAM Role:** Select the Glue Service Role created in step 3.
-        *   **Type:** Spark
-        *   **Glue version:** Choose a recent version (e.g., Glue 3.0 or 4.0).
-        *   **Script location:** Upload the `etl/glue_etl_job.py` script to your `glue-scripts` S3 bucket and point the job to this S3 path.
-        *   **Data source(s) (conceptual, configured in script):** The script will read from the `raw-data` S3 bucket.
-        *   **Data target(s) (conceptual, configured in script):** The script will write to the `processed-data` S3 bucket and load into Redshift.
-        *   **Job parameters (examples, can be passed to the script):**
-            *   `--RAW_S3_PATH`: `s3://your-unique-bucket-name-raw-data/`
-            *   `--PROCESSED_S3_PATH`: `s3://your-unique-bucket-name-processed-data/`
-            *   `--REDSHIFT_JDBC_URL`: `jdbc:redshift://your-redshift-cluster-endpoint:5439/your_db_name`
-            *   `--REDSHIFT_USER`: `your_redshift_master_username`
-            *   `--REDSHIFT_PASSWORD_SECRET_NAME`: (Optional) Name of AWS Secrets Manager secret for Redshift password.
-            *   `--TEMP_S3_DIR`: `s3://your-unique-bucket-name-glue-scripts/temp/`
-        *   **Connections:** Add a Redshift connection if your Glue job needs to connect directly via JDBC (provide JDBC URL, username, password/secret).
-
-6.  **Orchestration & Scheduling (Optional but Recommended):**
-    *   Use **Amazon CloudWatch Events (EventBridge)** to trigger the Glue ETL job on a schedule (e.g., daily) or based on S3 `PutObject` events in the raw data bucket.
-    *   For more complex workflows, consider **AWS Step Functions** to orchestrate multiple Glue jobs, Lambda functions, etc.
-
-7.  **Alerting (Optional):**
-    *   Configure **Amazon SNS** topics.
-    *   Set up Glue job notifications (on success, failure, timeout) to publish to the SNS topic.
-    *   Subscribe email addresses or other endpoints to the SNS topic.
-
-## Running the PoC (Conceptual)
-
-1.  **Upload Sample Data:**
-    *   Place your simulated `transactions.csv` and `budget.csv` files into the `data/raw/` directory locally.
-    *   Upload these files to your `s3://your-unique-bucket-name-raw-data/` S3 bucket.
-
-2.  **Manually Run the Glue ETL Job:**
-    *   Go to the AWS Glue console.
-    *   Select the `FinanceAnalytics_ETL_Job`.
-    *   Start the job run. Provide any necessary job parameters if not hardcoded or if you wish to override defaults.
-
-3.  **Monitor Job Execution:**
-    *   Monitor the Glue job status in the console.
-    *   Check CloudWatch Logs for detailed logging from the PySpark script.
-
-4.  **Verify Data:**
-    *   **Processed S3 Data:** Check your `s3://your-unique-bucket-name-processed-data/` bucket for Parquet files (e.g., `fact_financials/`, `dim_date/`, etc.).
-    *   **Redshift Data:** Connect to your Redshift cluster using a SQL client.
-        *   Run `SELECT COUNT(*) FROM DimDate;`, `SELECT COUNT(*) FROM FactFinancials;` etc., to verify data loading.
-        *   Execute sample queries from `sql/dml/sample_queries.sql` to explore the data.
-
-5.  **Connect BI Tool (Conceptual):**
-    *   Configure Tableau, Amazon QuickSight, or your preferred BI tool to connect to your Amazon Redshift cluster.
-    *   Use the Redshift endpoint, database name, username, and password.
-    *   Start building dashboards and visualizations based on the `FactFinancials` and its related dimension tables.
-
-## Key Features
-
--   **End-to-End Data Pipeline:** Demonstrates the flow of data from raw sources to an analytical data warehouse.
--   **Scalable AWS Architecture:** Leverages managed AWS services designed for scalability and performance.
--   **Star Schema Data Model:** Optimized for efficient BI querying and reporting.
--   **Automated ETL:** Utilizes AWS Glue for robust and repeatable data transformation processes.
--   **Self-Service Analytics Focus:** Aims to provide data in a format that empowers end-users.
--   **Modularity:** Components (S3, Glue, Redshift) can be individually scaled and managed.
-
-## Future Enhancements
-
--   **Infrastructure as Code (IaC):** Implement full deployment automation using AWS CloudFormation or Terraform.
--   **CI/CD Pipeline:** Set up a CI/CD pipeline (e.g., AWS CodePipeline, GitHub Actions) for automated testing and deployment of Glue scripts and SQL DDL.
--   **Data Quality Checks:** Integrate more comprehensive data quality checks within the ETL process (e.g., using Deequ on Glue or dbt tests).
--   **Advanced Orchestration:** Implement AWS Step Functions for more sophisticated workflow management and error handling.
--   **Security Enhancements:** Implement fine-grained access control, encryption at rest and in transit, and VPC endpoints.
--   **Incremental Data Loading:** Refine ETL scripts for efficient incremental loading of data into Redshift.
--   **Schema Evolution:** Develop a strategy for handling changes in source data schemas.
--   **Cost Optimization:** Implement strategies for optimizing AWS service costs (e.g., S3 lifecycle policies, Redshift reserved instances, Glue job optimization).
--   **Interactive Dashboard Examples:** Include basic dashboard examples using Amazon QuickSight.
--   **User Authentication & Authorization:** Integrate with IAM or a federated identity provider for BI tool access control.
-
-## Contributing
-
-Contributions to this proof-of-concept are welcome! If you have suggestions, improvements, or bug fixes, please follow these steps:
-
-1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/your-feature-name` or `bugfix/issue-number`).
-3.  Make your changes and commit them (`git commit -m 'Add some feature'`).
-4.  Push to the branch (`git push origin feature/your-feature-name`).
-5.  Open a Pull Request.
-
-Please ensure your code adheres to basic quality standards and include a clear description of your changes.
-
-## License
+## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
