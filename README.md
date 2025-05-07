@@ -183,31 +183,31 @@ The core ETL logic resides in the `etl/glue_etl_job.py` PySpark script, which ex
 
 ```mermaid
 flowchart TD
-    A[Start: Raw Data in S3 (CSVs: Transactions, Marketing, COGS)] --> B[Extract & Schema-Validate into Spark DataFrames];
+    A["Start: Raw Data in S3 (CSVs: Transactions, Marketing, COGS)"] --> B["Extract & Schema-Validate into Spark DataFrames"];
     
     subgraph Dimension Processing Phase
         direction LR
-        B --> D_Create[Create/Enrich Dimension DataFrames (Date, Product, Customer, Channel, Campaign)];
-        D_Create --> D_Load[Load Dimensions to Redshift];
-        D_Load --> D_SKs[Retrieve Dimension Surrogate Keys (SKs)];
+        B --> D_Create["Create/Enrich Dimension DataFrames (Date, Product, Customer, Channel, Campaign)"];
+        D_Create --> D_Load["Load Dimensions to Redshift"];
+        D_Load --> D_SKs["Retrieve Dimension Surrogate Keys (SKs)"];
     end
 
     subgraph Fact Table Processing Phase
-        F_Trans_Header[FactTransactions Assembly]
+        F_Trans_Header["FactTransactions Assembly"]
         B -- Transactions DF --> F_Trans_SKs_Join;
         B -- COGS DF --> F_Trans_COGS_Join;
         D_SKs -- Relevant SKs --> F_Trans_SKs_Join;
-        F_Trans_SKs_Join[Join Transactions DF with Dim SKs] --> F_Trans_COGS_Join[Join with COGS DF];
-        F_Trans_COGS_Join --> F_Trans_Calc[Perform Calculations (e.g., TotalCOGS)];
-        F_Trans_Calc --> F_Trans_Load[Load FactTransactions to Redshift];
+        F_Trans_SKs_Join["Join Transactions DF with Dim SKs"] --> F_Trans_COGS_Join["Join with COGS DF"];
+        F_Trans_COGS_Join --> F_Trans_Calc["Perform Calculations (e.g., TotalCOGS)"];
+        F_Trans_Calc --> F_Trans_Load["Load FactTransactions to Redshift"];
 
-        F_Mktg_Header[FactMarketingSpend Assembly]
+        F_Mktg_Header["FactMarketingSpend Assembly"]
         B -- Marketing Spend DF --> F_Mktg_SKs_Join;
         D_SKs -- Relevant SKs --> F_Mktg_SKs_Join;
-        F_Mktg_SKs_Join[Join Marketing Spend DF with Dim SKs] --> F_Mktg_Load[Load FactMarketingSpend to Redshift];
+        F_Mktg_SKs_Join["Join Marketing Spend DF with Dim SKs"] --> F_Mktg_Load["Load FactMarketingSpend to Redshift"];
     end
 
-    F_Trans_Load --> E[End: Curated Data in Redshift];
+    F_Trans_Load --> E["End: Curated Data in Redshift"];
     F_Mktg_Load  --> E;
 ```
 
