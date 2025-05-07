@@ -1,4 +1,4 @@
-# AWS Finance Analytics Platform - Proof-of-Concept
+# Finance Analytics Platform (AWS PoC)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
