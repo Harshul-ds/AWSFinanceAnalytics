@@ -1,0 +1,10 @@
+TransactionID,Date,DepartmentID,AccountID,Amount,Description
+1,2024-01-15,D101,A001,1500.00,Office Supplies Purchase
+2,2024-01-16,D102,A002,300.00,Software License Renewal
+3,2024-01-20,D101,A003,25000.00,New Server Hardware
+4,2024-02-10,D103,A001,750.00,Marketing Campaign Materials
+5,2024-02-12,D102,A004,12000.00,Consulting Fees - Project Alpha
+6,2024-02-28,D101,A002,250.00,Cloud Service Subscription
+7,2024-03-05,D103,A003,-500.00,Equipment Sale Refund
+8,2024-03-15,D101,A004,8000.00,Legal Services Q1
+9,2024-03-20,D102,A001,450.00,Travel Expenses - Conference
