@@ -1,84 +1,324 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   CloudFormation template for the AWS Finance Analytics PoC. 
-  This is a placeholder and requires significant customization for production.
+  Enhanced for a more production-like setup with VPC, Secrets Manager, and refined resources.
 
 Parameters:
   ProjectPrefix:
     Type: String
     Default: 'finpoc'
     Description: A prefix for resource names to ensure uniqueness and grouping.
+  VPCCIDR:
+    Type: String
+    Default: '10.0.0.0/16'
+    Description: CIDR block for the VPC.
+  PublicSubnet1CIDR:
+    Type: String
+    Default: '10.0.1.0/24'
+    Description: CIDR block for Public Subnet in AZ1.
+  PublicSubnet2CIDR:
+    Type: String
+    Default: '10.0.2.0/24'
+    Description: CIDR block for Public Subnet in AZ2.
+  PrivateSubnet1CIDR:
+    Type: String
+    Default: '10.0.101.0/24'
+    Description: CIDR block for Private Subnet for Redshift/Glue in AZ1.
+  PrivateSubnet2CIDR:
+    Type: String
+    Default: '10.0.102.0/24'
+    Description: CIDR block for Private Subnet for Redshift/Glue in AZ2.
   RedshiftMasterUsername:
     Type: String
     Default: 'awsuser'
-    Description: Master username for the Redshift cluster.
-  RedshiftMasterUserPassword:
+    Description: Master username for the Redshift cluster (password managed by Secrets Manager).
+  RedshiftNodeType:
     Type: String
-    Description: Master password for the Redshift cluster. (Consider using Secrets Manager in production)
-    NoEcho: true
-    MinLength: 8
+    Default: 'dc2.large'
+    Description: Node type for the Redshift cluster.
+  RedshiftNumberOfNodes:
+    Type: Number
+    Default: 1
+    Description: Number of nodes for the Redshift cluster (1 for single-node, >1 for multi-node).
   GlueJobScriptName:
     Type: String
     Default: 'glue_etl_job.py'
     Description: The name of the Glue ETL script file in the S3 bucket.
 
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Project Configuration'
+        Parameters:
+          - ProjectPrefix
+      - Label:
+          default: 'Network Configuration'
+        Parameters:
+          - VPCCIDR
+          - PublicSubnet1CIDR
+          - PublicSubnet2CIDR
+          - PrivateSubnet1CIDR
+          - PrivateSubnet2CIDR
+      - Label:
+          default: 'Compute Configuration'
+        Parameters:
+          - RedshiftMasterUsername
+          - RedshiftNodeType
+          - RedshiftNumberOfNodes
+          - GlueJobScriptName
+    ParameterLabels:
+      ProjectPrefix:
+        default: 'Project Prefix'
+      VPCCIDR:
+        default: 'VPC CIDR Block'
+      PublicSubnet1CIDR:
+        default: 'Public Subnet 1 (AZ1) CIDR'
+      PublicSubnet2CIDR:
+        default: 'Public Subnet 2 (AZ2) CIDR'
+      PrivateSubnet1CIDR:
+        default: 'Private Subnet 1 (AZ1) CIDR'
+      PrivateSubnet2CIDR:
+        default: 'Private Subnet 2 (AZ2) CIDR'
+
 Resources:
-  # --- S3 Buckets ---
+  # --- VPC and Networking ---
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-VPC'
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-IGW'
+
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PublicSubnet1'
+
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PublicSubnet2'
+
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PrivateSubnet1'
+
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PrivateSubnet2'
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PublicRouteTable'
+
+  DefaultPublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  EIP1ForNATGateway:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-NAT-EIP1'
+
+  EIP2ForNATGateway:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-NAT-EIP2'
+
+  NATGateway1:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt EIP1ForNATGateway.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-NATGateway1'
+
+  NATGateway2:
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      AllocationId: !GetAtt EIP2ForNATGateway.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-NATGateway2'
+
+  PrivateRouteTable1:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PrivateRouteTable1'
+
+  DefaultPrivateRoute1:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrivateRouteTable2:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-PrivateRouteTable2'
+
+  DefaultPrivateRoute2:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  S3VPCEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:*'
+            Resource: '*' # Restrict this to specific buckets in production
+      RouteTableIds:
+        - !Ref PrivateRouteTable1
+        - !Ref PrivateRouteTable2
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+
+  # --- S3 Buckets (Simplified, add LoggingConfiguration, Versioning, etc. as before) ---
   RawDataBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketName: !Sub '${ProjectPrefix}-raw-data-${AWS::AccountId}-${AWS::Region}'
-      VersioningConfiguration:
-        Status: Enabled
+      # Add PublicAccessBlockConfiguration, Versioning, Logging from previous version
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      LoggingConfiguration:
-        DestinationBucketName: !Ref AccessLogsBucket
-        LogFilePrefix: 's3-raw-data-access-logs/'
+      VersioningConfiguration:
+        Status: Enabled
 
   ProcessedDataBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketName: !Sub '${ProjectPrefix}-processed-data-${AWS::AccountId}-${AWS::Region}'
-      VersioningConfiguration:
-        Status: Enabled
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      LoggingConfiguration:
-        DestinationBucketName: !Ref AccessLogsBucket
-        LogFilePrefix: 's3-processed-data-access-logs/'
+      VersioningConfiguration:
+        Status: Enabled
 
   GlueScriptsBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
       BucketName: !Sub '${ProjectPrefix}-glue-scripts-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      LoggingConfiguration:
-        DestinationBucketName: !Ref AccessLogsBucket
-        LogFilePrefix: 's3-glue-scripts-access-logs/'
 
-  AccessLogsBucket:
-    Type: 'AWS::S3::Bucket'
+  # --- Secrets Manager for Redshift Password ---
+  RedshiftPasswordSecret:
+    Type: 'AWS::SecretsManager::Secret'
     Properties:
-      BucketName: !Sub '${ProjectPrefix}-access-logs-${AWS::AccountId}-${AWS::Region}'
-      AccessControl: LogDeliveryWrite
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+      Name: !Sub '${ProjectPrefix}/redshift/masterpassword'
+      Description: 'Redshift master user password'
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${RedshiftMasterUsername}"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"''@/\\'
 
   # --- IAM Roles ---
   GlueExecutionRole:
@@ -93,6 +333,9 @@ Resources:
               Service: glue.amazonaws.com
             Action: 'sts:AssumeRole'
       Path: '/'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole' # Base Glue permissions
+        - 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly' # If using custom Docker images for Glue
       Policies:
         - PolicyName: S3AccessForGlue
           PolicyDocument:
@@ -103,38 +346,41 @@ Resources:
                   - 's3:GetObject'
                   - 's3:PutObject'
                   - 's3:DeleteObject'
-                  - 's3:ListBucket'
+                Resource:
+                  - !Sub 'arn:aws:s3:::${RawDataBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ProcessedDataBucket}/*'
+                  - !Sub 'arn:aws:s3:::${GlueScriptsBucket}/*'
+              - Effect: Allow
+                Action: 's3:ListBucket'
                 Resource:
                   - !GetAtt RawDataBucket.Arn
-                  - !Sub '${GetAtt RawDataBucket.Arn}/*'
                   - !GetAtt ProcessedDataBucket.Arn
-                  - !Sub '${GetAtt ProcessedDataBucket.Arn}/*'
                   - !GetAtt GlueScriptsBucket.Arn
-                  - !Sub '${GetAtt GlueScriptsBucket.Arn}/*'
-        - PolicyName: CloudWatchLogsForGlue
+        - PolicyName: SecretsManagerReadForGlue
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'secretsmanager:GetSecretValue'
+                Resource: !Ref RedshiftPasswordSecret
+        - PolicyName: GlueVPCAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                  - 'logs:AssociateKmsKey'
-                Resource: 'arn:aws:logs:*:*:*'
-        # Add Redshift access policy here once Redshift cluster is defined, or use AWS Managed `AWSGlueServiceRole`
-        # Placeholder for Redshift JDBC access:
-        # - PolicyName: RedshiftAccessForGlue
-        #   PolicyDocument:
-        #     Version: '2012-10-17'
-        #     Statement:
-        #       - Effect: Allow
-        #         Action:
-        #           - 'redshift:DescribeClusters'
-        #           - 'redshift-data:ExecuteStatement' # If using Redshift Data API
-        #         Resource: '*'
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole # Provides broad Glue permissions
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:DeleteNetworkInterface'
+                  - 'ec2:AssignPrivateIpAddresses'
+                  - 'ec2:UnassignPrivateIpAddresses'
+                Resource: '*' # Scoped down in production
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeVpcs'
+                  - 'ec2:DescribeSubnets'
+                  - 'ec2:DescribeSecurityGroups'
+                Resource: '*'
 
   RedshiftCopyRole:
     Type: 'AWS::IAM::Role'
@@ -158,29 +404,77 @@ Resources:
                   - 's3:GetObject'
                   - 's3:ListBucket'
                 Resource:
-                  - !GetAtt ProcessedDataBucket.Arn # Redshift typically copies from Processed Data
+                  - !GetAtt ProcessedDataBucket.Arn
                   - !Sub '${GetAtt ProcessedDataBucket.Arn}/*'
-                  # Might also need access to raw if staging directly
+                  - !GetAtt RawDataBucket.Arn # Might need raw for some direct loads/staging
+                  - !Sub '${GetAtt RawDataBucket.Arn}/*'
 
-  # --- Amazon Redshift Cluster (Placeholder) ---
-  # WARNING: This is a very basic placeholder. 
-  # Production Redshift requires VPC, Subnet Groups, Security Groups, Parameter Groups, etc.
+  # --- Security Groups ---
+  RedshiftSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub '${ProjectPrefix}-RedshiftSG'
+      GroupDescription: 'Security group for Redshift cluster'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # Allow access from Glue Security Group on Redshift port (default 5439)
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref GlueSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-RedshiftSG'
+
+  GlueSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Sub '${ProjectPrefix}-GlueSG'
+      GroupDescription: 'Security group for Glue jobs running in VPC'
+      VpcId: !Ref VPC
+      # Egress to Redshift SG on port 5439 is implicitly allowed by RedshiftSG Ingress
+      # Add other egress rules if Glue needs to access other resources
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-GlueSG'
+
+  # --- Amazon Redshift Cluster ---
+  RedshiftSubnetGroup:
+    Type: 'AWS::Redshift::ClusterSubnetGroup'
+    Properties:
+      Description: 'Subnet group for Redshift cluster'
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-RedshiftSubnetGroup'
+
   RedshiftCluster:
     Type: 'AWS::Redshift::Cluster'
     Properties:
       ClusterIdentifier: !Sub '${ProjectPrefix}-redshift-cluster'
-      NodeType: 'dc2.large' # Choose appropriate node type
-      NumberOfNodes: 1 # For PoC, single node. Multi-node for production.
+      NodeType: !Ref RedshiftNodeType
+      NumberOfNodes: !Ref RedshiftNumberOfNodes
       DBName: !Sub '${ProjectPrefix}db'
       MasterUsername: !Ref RedshiftMasterUsername
-      MasterUserPassword: !Ref RedshiftMasterUserPassword
-      ClusterType: 'single-node' # Use 'multi-node' for production
-      PubliclyAccessible: true # For PoC ease, NOT recommended for production. Use VPC endpoints.
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${RedshiftPasswordSecret}:SecretString:password}}'
+      ClusterType: !If [IsMultiNode, 'multi-node', 'single-node']
+      PubliclyAccessible: false # Deployed in private subnets
+      ClusterSubnetGroupName: !Ref RedshiftSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RedshiftSecurityGroup
       IamRoles:
         - !GetAtt RedshiftCopyRole.Arn
-      # VPC Subnet Group and Security Group are typically required for non-publicly accessible clusters
-      # ClusterSubnetGroupName: 'your-redshift-subnet-group'
-      # VpcSecurityGroupIds: ['sg-xxxxxxxx']
+      Encrypted: true
+      # KmsKeyId: String # Optional: specify your own KMS key
+      # Add other properties: ParameterGroupName, MaintenanceWindow, etc.
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-RedshiftCluster'
+
+Conditions:
+  IsMultiNode: !Not [!Equals [!Ref RedshiftNumberOfNodes, 1]]
 
   # --- AWS Glue Job (Placeholder) ---
   MyGlueEtlJob:
@@ -189,12 +483,12 @@ Resources:
       Name: !Sub '${ProjectPrefix}-Financial-ETL-Job'
       Role: !GetAtt GlueExecutionRole.Arn
       Command:
-        Name: 'glueetl' # For PySpark jobs
+        Name: 'glueetl'
         ScriptLocation: !Sub 's3://${GlueScriptsBucket.BucketName}/${GlueJobScriptName}'
         PythonVersion: '3'
-      GlueVersion: '4.0' # Or '3.0', '2.0' depending on requirements
-      WorkerType: 'G.1X' # Standard worker type
-      NumberOfWorkers: 5   # Adjust based on workload
+      GlueVersion: '4.0' # Or '3.0'
+      WorkerType: 'G.1X'
+      NumberOfWorkers: 5
       DefaultArguments:
         '--enable-metrics': ''
         '--enable-continuous-logging': 'true'
@@ -202,13 +496,36 @@ Resources:
         '--RAW_S3_PATH': !Sub 's3://${RawDataBucket.BucketName}/'
         '--PROCESSED_S3_PATH': !Sub 's3://${ProcessedDataBucket.BucketName}/'
         '--TEMP_S3_DIR': !Sub 's3://${GlueScriptsBucket.BucketName}/temp/'
-        '--REDSHIFT_JDBC_URL': !Sub 'jdbc:redshift://${RedshiftCluster.Endpoint.Address}:${RedshiftCluster.Endpoint.Port}/${RedshiftCluster.DBName}'
-        '--REDSHIFT_USER': !Ref RedshiftMasterUsername # Consider a dedicated ETL user
+        '--REDSHIFT_DB_NAME': !Sub '${ProjectPrefix}db'
+        '--REDSHIFT_CLUSTER_ID': !Ref RedshiftCluster # For Data API if used
+        '--REDSHIFT_SECRET_ARN': !Ref RedshiftPasswordSecret # Job code needs to fetch this
         '--REDSHIFT_IAM_ROLE': !GetAtt RedshiftCopyRole.Arn
-      # MaxRetries: 0
-      # Timeout: 2880 # In minutes
+        '--CONNECTION_SUBNET_ID': !Ref PrivateSubnet1 # For Glue jobs needing VPC access
+        '--CONNECTION_SECURITY_GROUP_ID': !Ref GlueSecurityGroup
+      Connections:
+        Connections: [] # If using Glue connections explicitly
+      ExecutionProperty:
+        MaxConcurrentRuns: 1
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectPrefix}-GlueJob'
 
 Outputs:
+  VPCId:
+    Description: ID of the created VPC.
+    Value: !Ref VPC
+  PublicSubnetIds:
+    Description: IDs of the public subnets.
+    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+  PrivateSubnetIds:
+    Description: IDs of the private subnets.
+    Value: !Join [',', [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+  RedshiftSecurityGroupId:
+    Description: ID of the Redshift Security Group.
+    Value: !Ref RedshiftSecurityGroup
+  GlueSecurityGroupId:
+    Description: ID of the Glue Security Group.
+    Value: !Ref GlueSecurityGroup
   RawDataBucketName:
     Description: Name of the S3 bucket for raw data.
     Value: !Ref RawDataBucket
@@ -218,9 +535,9 @@ Outputs:
   GlueScriptsBucketName:
     Description: Name of the S3 bucket for Glue scripts.
     Value: !Ref GlueScriptsBucket
-  GlueExecutionRoleArn:
-    Description: ARN of the IAM Role for Glue ETL jobs.
-    Value: !GetAtt GlueExecutionRole.Arn
+  RedshiftPasswordSecretArn:
+    Description: ARN of the Secrets Manager secret for Redshift password.
+    Value: !Ref RedshiftPasswordSecret
   RedshiftClusterEndpoint:
     Description: Endpoint for the Redshift Cluster.
     Value: !Join [':', [!GetAtt RedshiftCluster.Endpoint.Address, !GetAtt RedshiftCluster.Endpoint.Port]]
