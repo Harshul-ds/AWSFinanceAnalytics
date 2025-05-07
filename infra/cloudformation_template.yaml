@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template for the AWS Finance Analytics PoC. 
+  This is a placeholder and requires significant customization for production.
+
+Parameters:
+  ProjectPrefix:
+    Type: String
+    Default: 'finpoc'
+    Description: A prefix for resource names to ensure uniqueness and grouping.
+  RedshiftMasterUsername:
+    Type: String
+    Default: 'awsuser'
+    Description: Master username for the Redshift cluster.
+  RedshiftMasterUserPassword:
+    Type: String
+    Description: Master password for the Redshift cluster. (Consider using Secrets Manager in production)
+    NoEcho: true
+    MinLength: 8
+  GlueJobScriptName:
+    Type: String
+    Default: 'glue_etl_job.py'
+    Description: The name of the Glue ETL script file in the S3 bucket.
+
+Resources:
+  # --- S3 Buckets ---
+  RawDataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${ProjectPrefix}-raw-data-${AWS::AccountId}-${AWS::Region}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogsBucket
+        LogFilePrefix: 's3-raw-data-access-logs/'
+
+  ProcessedDataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${ProjectPrefix}-processed-data-${AWS::AccountId}-${AWS::Region}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogsBucket
+        LogFilePrefix: 's3-processed-data-access-logs/'
+
+  GlueScriptsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${ProjectPrefix}-glue-scripts-${AWS::AccountId}-${AWS::Region}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLogsBucket
+        LogFilePrefix: 's3-glue-scripts-access-logs/'
+
+  AccessLogsBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${ProjectPrefix}-access-logs-${AWS::AccountId}-${AWS::Region}'
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # --- IAM Roles ---
+  GlueExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectPrefix}-GlueExecutionRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: S3AccessForGlue
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt RawDataBucket.Arn
+                  - !Sub '${GetAtt RawDataBucket.Arn}/*'
+                  - !GetAtt ProcessedDataBucket.Arn
+                  - !Sub '${GetAtt ProcessedDataBucket.Arn}/*'
+                  - !GetAtt GlueScriptsBucket.Arn
+                  - !Sub '${GetAtt GlueScriptsBucket.Arn}/*'
+        - PolicyName: CloudWatchLogsForGlue
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:AssociateKmsKey'
+                Resource: 'arn:aws:logs:*:*:*'
+        # Add Redshift access policy here once Redshift cluster is defined, or use AWS Managed `AWSGlueServiceRole`
+        # Placeholder for Redshift JDBC access:
+        # - PolicyName: RedshiftAccessForGlue
+        #   PolicyDocument:
+        #     Version: '2012-10-17'
+        #     Statement:
+        #       - Effect: Allow
+        #         Action:
+        #           - 'redshift:DescribeClusters'
+        #           - 'redshift-data:ExecuteStatement' # If using Redshift Data API
+        #         Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole # Provides broad Glue permissions
+
+  RedshiftCopyRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${ProjectPrefix}-RedshiftCopyRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: redshift.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: S3ReadForRedshiftCopy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt ProcessedDataBucket.Arn # Redshift typically copies from Processed Data
+                  - !Sub '${GetAtt ProcessedDataBucket.Arn}/*'
+                  # Might also need access to raw if staging directly
+
+  # --- Amazon Redshift Cluster (Placeholder) ---
+  # WARNING: This is a very basic placeholder. 
+  # Production Redshift requires VPC, Subnet Groups, Security Groups, Parameter Groups, etc.
+  RedshiftCluster:
+    Type: 'AWS::Redshift::Cluster'
+    Properties:
+      ClusterIdentifier: !Sub '${ProjectPrefix}-redshift-cluster'
+      NodeType: 'dc2.large' # Choose appropriate node type
+      NumberOfNodes: 1 # For PoC, single node. Multi-node for production.
+      DBName: !Sub '${ProjectPrefix}db'
+      MasterUsername: !Ref RedshiftMasterUsername
+      MasterUserPassword: !Ref RedshiftMasterUserPassword
+      ClusterType: 'single-node' # Use 'multi-node' for production
+      PubliclyAccessible: true # For PoC ease, NOT recommended for production. Use VPC endpoints.
+      IamRoles:
+        - !GetAtt RedshiftCopyRole.Arn
+      # VPC Subnet Group and Security Group are typically required for non-publicly accessible clusters
+      # ClusterSubnetGroupName: 'your-redshift-subnet-group'
+      # VpcSecurityGroupIds: ['sg-xxxxxxxx']
+
+  # --- AWS Glue Job (Placeholder) ---
+  MyGlueEtlJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      Name: !Sub '${ProjectPrefix}-Financial-ETL-Job'
+      Role: !GetAtt GlueExecutionRole.Arn
+      Command:
+        Name: 'glueetl' # For PySpark jobs
+        ScriptLocation: !Sub 's3://${GlueScriptsBucket.BucketName}/${GlueJobScriptName}'
+        PythonVersion: '3'
+      GlueVersion: '4.0' # Or '3.0', '2.0' depending on requirements
+      WorkerType: 'G.1X' # Standard worker type
+      NumberOfWorkers: 5   # Adjust based on workload
+      DefaultArguments:
+        '--enable-metrics': ''
+        '--enable-continuous-logging': 'true'
+        '--job-bookmark-option': 'job-bookmark-enable'
+        '--RAW_S3_PATH': !Sub 's3://${RawDataBucket.BucketName}/'
+        '--PROCESSED_S3_PATH': !Sub 's3://${ProcessedDataBucket.BucketName}/'
+        '--TEMP_S3_DIR': !Sub 's3://${GlueScriptsBucket.BucketName}/temp/'
+        '--REDSHIFT_JDBC_URL': !Sub 'jdbc:redshift://${RedshiftCluster.Endpoint.Address}:${RedshiftCluster.Endpoint.Port}/${RedshiftCluster.DBName}'
+        '--REDSHIFT_USER': !Ref RedshiftMasterUsername # Consider a dedicated ETL user
+        '--REDSHIFT_IAM_ROLE': !GetAtt RedshiftCopyRole.Arn
+      # MaxRetries: 0
+      # Timeout: 2880 # In minutes
+
+Outputs:
+  RawDataBucketName:
+    Description: Name of the S3 bucket for raw data.
+    Value: !Ref RawDataBucket
+  ProcessedDataBucketName:
+    Description: Name of the S3 bucket for processed data.
+    Value: !Ref ProcessedDataBucket
+  GlueScriptsBucketName:
+    Description: Name of the S3 bucket for Glue scripts.
+    Value: !Ref GlueScriptsBucket
+  GlueExecutionRoleArn:
+    Description: ARN of the IAM Role for Glue ETL jobs.
+    Value: !GetAtt GlueExecutionRole.Arn
+  RedshiftClusterEndpoint:
+    Description: Endpoint for the Redshift Cluster.
+    Value: !Join [':', [!GetAtt RedshiftCluster.Endpoint.Address, !GetAtt RedshiftCluster.Endpoint.Port]]
+  RedshiftIAMRoleArn:
+    Description: ARN of the IAM Role for Redshift COPY operations.
+    Value: !GetAtt RedshiftCopyRole.Arn
+  GlueJobName:
+    Description: Name of the AWS Glue ETL Job.
+    Value: !Ref MyGlueEtlJob
