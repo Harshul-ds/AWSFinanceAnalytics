@@ -50,7 +50,7 @@ The platform employs a modern data warehousing architecture leveraging the follo
 
 ```mermaid
 graph LR
-    A[Data Sources (e.g., Financial Systems CSVs)] --> B(S3 Raw Data Lake);
+    A["Data Sources (e.g., Financial Systems CSVs)"] --> B(S3 Raw Data Lake);
     B --> |AWS Glue ETL Processing| C(S3 Processed Data Lake - Optional Parquet Staging);
     C --> |AWS Glue ETL / Redshift Ingestion| D[Amazon Redshift - Curated Star Schema];
     D --> |SQL & BI Tool Connectivity| E(Business Intelligence & Reporting Tools - e.g., QuickSight, Tableau);
